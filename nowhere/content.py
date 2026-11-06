@@ -1,0 +1,84 @@
+"""Content pipeline runtime entry point.
+
+Reads from content.db (read-only). All data flows through this module.
+Build with: python tools/bake_content.py
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import pathlib
+import sqlite3
+import sys
+
+_DB_PATH = pathlib.Path(__file__).resolve().parent / "content.db"
+_SRC_PATH = pathlib.Path(__file__).resolve().parent.parent / "content_src"
+
+_conn: sqlite3.Connection | None = None
+
+
+def _db() -> sqlite3.Connection:
+    global _conn
+    if _conn is None:
+        _conn = sqlite3.connect(f"file:{_DB_PATH}?mode=ro", uri=True)
+        _conn.row_factory = sqlite3.Row
+    return _conn
+
+
+def pools() -> list[dict]:
+    """Return list of registered pools with metadata."""
+    conn = _db()
+    rows = conn.execute(
+        "SELECT name, entry_points, reader, description FROM pools"
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def cards(pool: str, key: str | None = None,
+          subkey: str | None = None) -> list[dict]:
+    """Return list of {text, constraints} dicts for the given pool/key/subkey."""
+    conn = _db()
+    sql = "SELECT text, constraints FROM cards WHERE pool = ?"
+    params: list = [pool]
+    if key is not None:
+        sql += " AND key = ?"
+        params.append(key)
+    if subkey is not None:
+        sql += " AND subkey = ?"
+        params.append(subkey)
+    sql += " ORDER BY id"
+    rows = conn.execute(sql, params).fetchall()
+    result = []
+    for row in rows:
+        c = row["constraints"]
+        try:
+            constraints = json.loads(c) if c else None
+        except (json.JSONDecodeError, TypeError) as exc:
+            # 一条脏数据不该让整个卡池不可用
+            print(f"[content] bad constraints in {pool}: {exc}", file=sys.stderr)
+            constraints = None
+        result.append({
+            "text": row["text"],
+            "constraints": constraints,
+        })
+    return result
+
+
+def fresh() -> bool:
+    """Check manifest sha1 vs actual content_src files. True if all match."""
+    conn = _db()
+    rows = conn.execute("SELECT source_file, sha1 FROM manifest").fetchall()
+    for row in rows:
+        src_file = row["source_file"]
+        expected = row["sha1"]
+        fp = _SRC_PATH / src_file
+        if not fp.exists():
+            return False
+        try:
+            actual = hashlib.sha1(fp.read_bytes()).hexdigest()
+        except OSError:
+            # exists() 之后仍可能权限/IO 失败或被并发删除(TOCTOU) → 按不新鲜
+            return False
+        if actual != expected:
+            return False
+    return True

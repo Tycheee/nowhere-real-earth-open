@@ -1,0 +1,17 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.log
+runtime/
+nowhere_mcp.egg-info/
+tools/.cache/
+e2e_out.txt
+mcp_verify.txt
+repro_before.txt
+repro_after.txt
+nowhere/data/landmask_hi.npz
+nowhere/data/packs/
+nowhere/data/tiles/
+nowhere/data/places.db*

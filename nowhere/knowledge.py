@@ -1,0 +1,416 @@
+"""Knowledge encounters -- local facts via pre-built knowledge base.
+
+All heavy lifting (Wikipedia extraction) is done offline by
+``tools/build_ask_kb.py`` → ``data/ask_kb.json``.  Runtime code only reads
+JSON — no large file parsing, no third-party parser dependencies.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import logging
+import pathlib
+import random as _random
+import re
+
+logger = logging.getLogger(__name__)
+
+# --- Local knowledge base -------------------------------------------------
+_DATA = pathlib.Path(__file__).resolve().parent / "data"
+
+_KB_FILES = [
+    "knowledge.json",
+    "ask_kb.json",
+]
+
+_local_kb: dict[str, dict] | None = None
+# Inverted index: first character → list of KB keys starting with that char
+_kb_char_index: dict[str, list[str]] | None = None
+# Label index: loaded from ask_labels.json
+_labels: dict[str, list[str]] | None = None
+# City-level aggregated data (卡88)
+_city_data: dict[str, dict[str, list[str]]] | None = None
+# Topic word → ask_city.json category mapping (卡88)
+_TOPIC_LABELS: dict[str, list[str]] = {
+    "历史": ["历史"],
+    "好吃的": ["美食"],
+    "美食": ["美食"],
+    "风俗": ["历史"],
+    "习俗": ["历史"],
+    "节日": ["节日"],
+    "建筑": ["地标"],
+    "动物": [],
+    "植物": [],
+    "风景": ["季节"],
+    "音乐": [],
+    "运动": [],
+    "体育": [],
+    "科技": [],
+    "名人": ["历史"],
+    "皇帝": ["历史"],
+    "王朝": ["历史"],
+    "服装": [],
+    "食物": ["美食"],
+    "菜系": ["美食"],
+    "小吃": ["美食"],
+    "水果": ["美食"],
+    "艺术": [],
+    "文化": ["历史"],
+    "宗教": ["地标"],
+    "语言": [],
+    "职业": [],
+    "学校": [],
+    "大学": [],
+    "故事": ["历史", "见闻"],
+    "寺庙": ["地标"],
+    "教堂": ["地标"],
+    "自然": ["季节"],
+    "气候": ["季节"],
+    "天气": ["季节"],
+    "地标": ["地标"],
+    "景点": ["地标"],
+    "见闻": ["见闻"],
+}
+
+
+def _load_local_kb() -> dict[str, dict]:
+    """Load and merge all local knowledge base JSON files (cached).
+
+    ``knowledge.json`` has structured entries (dicts with 一句话 / card / …).
+    ``ask_kb.json`` has flat ``{name: extract_text}`` entries produced by the
+    offline builder.  They are normalised to the same ``{title, extract, …}``
+    shape so the rest of the code can treat them uniformly.
+    """
+    global _local_kb, _kb_char_index, _labels, _city_data
+    if _local_kb is not None:
+        return _local_kb
+
+    _local_kb = {}
+    for fname in _KB_FILES:
+        fp = _DATA / fname
+        if not fp.exists():
+            continue
+        data = json.loads(fp.read_text(encoding="utf-8"))
+        _local_kb.update(data)
+
+    # Build inverted index for substring lookups.
+    # 对 name 的所有字符建索引: 反向包含(title in name)的条目, 其首字符
+    # 未必出现在 title 里("熊猫" vs "大熊猫"), 只按 name[0] 建会静默漏配
+    idx: dict[str, list[str]] = {}
+    for name in _local_kb:
+        if name:
+            for ch in dict.fromkeys(name):
+                idx.setdefault(ch, []).append(name)
+    _kb_char_index = idx
+
+    # Load labels (卡88)
+    labels_fp = _DATA / "ask_labels.json"
+    if labels_fp.exists():
+        _labels = json.loads(labels_fp.read_text(encoding="utf-8"))
+
+    # Load city-level aggregated data (卡88)
+    city_fp = _DATA / "ask_city.json"
+    if city_fp.exists():
+        _city_data = json.loads(city_fp.read_text(encoding="utf-8"))
+
+    return _local_kb
+
+
+def _format_kb_entry(name: str, entry: dict | str) -> dict:
+    """Format a local KB entry as a knowledge result.
+
+    Two shapes live in the merged KB:
+
+    * Structured (from ``knowledge.json``):  ``{一句话, 特色, 语言, 首都, 海拔, 位置, 冷知识, 别名, 货币, card, ...}``
+    * Flat (from ``ask_kb.json``):  plain ``str`` (the extract text)
+
+    Both are normalised to ``{title, extract, url, source}``.
+    """
+    # --- flat string entry (from ask_kb.json) ---
+    if isinstance(entry, str):
+        return {
+            "title": name,
+            "extract": entry,
+            "url": "",
+            "source": "ask_kb",
+        }
+
+    # --- structured dict entry (from knowledge.json) ---
+    parts: list[str] = []
+    for key in ["一句话", "特色", "语言", "首都"]:
+        if key in entry and isinstance(entry[key], str):
+            parts.append(entry[key])
+    alt = entry.get("海拔")
+    if isinstance(alt, str) and alt:
+        m = re.match(r"([\d.]+)\s*m", alt.strip())
+        parts.append(f"海拔约 {m.group(1)} 米" if m else alt)
+    # 位置 / 冷知识 / 别名 / 货币 (S2 接线)
+    loc = entry.get("位置")
+    if isinstance(loc, str) and loc:
+        parts.append(loc)
+    trivia = entry.get("冷知识")
+    if isinstance(trivia, str) and trivia:
+        parts.append(trivia)
+    alias = entry.get("别名")
+    if isinstance(alias, str) and alias:
+        parts.append(f"又称{alias}")
+    currency = entry.get("货币")
+    if isinstance(currency, str) and currency:
+        parts.append(f"当地用{currency}")
+    cards = entry.get("card")
+    if isinstance(cards, list):
+        for c in cards:
+            if isinstance(c, dict):
+                content = c.get("content")
+                if isinstance(content, str) and content:
+                    parts.append(content)
+    extract = "。".join(p.rstrip("。") for p in parts if p)
+    return {
+        "title": name,
+        "extract": extract,
+        "url": "",
+        "source": "local_kb",
+    }
+
+
+async def about(lat: float, lon: float, topic: str, rng: _random.Random | None = None) -> dict | None:
+    """Return a knowledge result from the local KB, or *None*.
+
+    Parameters
+    ----------
+    topic:
+        Search filter.  If non-empty, look up the article by that title.
+        If empty, try to find the nearest named place from *lat/lon*.
+    """
+    title = topic.strip() if topic else ""
+    place_name = ""
+
+    if rng is None:
+        # BND-07: hash() of a str is per-process randomised — seed must be stable
+        seed = int(hashlib.md5(f"{lat:.4f},{lon:.4f}|{topic}".encode("utf-8")).hexdigest(), 16)
+        rng = _random.Random(seed)
+    # 首次调用含 JSON 解析, 放线程外避免阻塞事件循环
+    kb = await asyncio.to_thread(_load_local_kb)
+
+    # ── 1. Exact match ──
+    if title and title in kb:
+        return _format_kb_entry(title, kb[title])
+
+    # ── 2. Bidirectional substring (卡88) ──
+    # Skip if the query contains a topic word (历史/美食/地标/…);
+    # let step 4 (topic mapping) handle it instead, so that
+    # "故宫的历史" returns history content rather than a raw 故宫 entry.
+    _has_topic_word = any(tw in title for tw in _TOPIC_LABELS)
+    if title and not _has_topic_word:
+        idx = _kb_char_index or {}
+        # dict.fromkeys 保持 title 首现顺序, set 会随 PYTHONHASHSEED 漂移,
+        # 多条目同时满足时返回结果不可复现 (BND-07 要求确定性)
+        # Forward: "故宫有什么" contains "故宫" → match
+        for ch in dict.fromkeys(title):
+            for name in idx.get(ch, []):
+                if name in title:
+                    entry = kb.get(name)
+                    if entry is not None:
+                        return _format_kb_entry(name, entry)
+        # Backward: "故宫" is substring of "故宫博物院"
+        for ch in dict.fromkeys(title):
+            for name in idx.get(ch, []):
+                if title in name:
+                    entry = kb.get(name)
+                    if entry is not None:
+                        return _format_kb_entry(name, entry)
+
+    # ── 3. Entity extraction: find KB keys mentioned in topic (卡88) ──
+    # Only match keys >= 3 chars to avoid false positives
+    # Skip if topic contains a topic word (美食/历史/地标 etc.) — let step 4 handle it
+    if title and not _has_topic_word:
+        for name in sorted(kb.keys(), key=len, reverse=True):
+            if len(name) >= 3 and name in title:
+                entry = kb.get(name)
+                if entry is not None:
+                    return _format_kb_entry(name, entry)
+
+    # ── 4. Topic word mapping (卡88) ──
+    # "这里的美食" / "这里的历史" / "这里的寺庙"
+    if title:
+        for topic_word, target_labels in _TOPIC_LABELS.items():
+            if topic_word in title:
+                # place 解析含同步 IO, 只在真的含话题词时才付这个代价
+                place_name = await _resolve_place_name(lat, lon)
+                if place_name and _city_data:
+                    # 1. Direct city match in ask_city.json
+                    city_entry = _city_data.get(place_name)
+                    if city_entry:
+                        for label in target_labels:
+                            if label in city_entry and city_entry[label]:
+                                # Return random entry from this category
+                                pick = rng.choice(city_entry[label])
+                                return {"title": f"{place_name}·{label}", "extract": pick, "url": "", "source": "ask_city"}
+                    # 2. Try partial match (e.g., "北京市" → "北京")
+                    for city_name, city_entry in _city_data.items():
+                        if city_name in place_name or place_name in city_name:
+                            for label in target_labels:
+                                if label in city_entry and city_entry[label]:
+                                    pick = rng.choice(city_entry[label])
+                                    return {"title": f"{city_name}·{label}", "extract": pick, "url": "", "source": "ask_city"}
+                break
+
+    # ── 5. Label fallback (卡88) ──
+    if title and _labels:
+        place_name = place_name or await _resolve_place_name(lat, lon)
+        if place_name:
+            for name, tags in _labels.items():
+                if place_name in name and tags:
+                    entry = kb.get(name)
+                    if entry is not None:
+                        return _format_kb_entry(name, entry)
+
+    # ── 6. Coordinate fallback (no topic) ──
+    if not title:
+        place_name = place_name or await _resolve_place_name(lat, lon)
+        if place_name and place_name in kb:
+            return _format_kb_entry(place_name, kb[place_name])
+
+    return None
+
+
+async def _resolve_place_name(lat: float, lon: float) -> str:
+    """Get the nearest named place for given coordinates (Chinese name优先)."""
+    try:
+        from nowhere import places
+
+        def _lookup() -> str:
+            # places.nearby 与 _get_chinese_name 都是同步 SQLite/文件扫描
+            nearby = places.nearby(lat, lon, radius_km=20, limit=1)
+            if nearby:
+                name = nearby[0]["name"]
+                zh = _get_chinese_name(name)
+                return zh or name
+            return ""
+
+        return await asyncio.to_thread(_lookup)
+    except Exception as exc:
+        logger.debug("places.nearby failed: %s", exc)
+    return ""
+
+
+def _get_chinese_name(eng_name: str) -> str:
+    """Look up Chinese name from places.db alts column."""
+    import sqlite3
+    db = None
+    try:
+        db = sqlite3.connect(_DATA / "places.db", timeout=5)
+        row = db.execute(
+            "SELECT alts FROM places WHERE name = ? AND fclass = 'P' LIMIT 1",
+            (eng_name,)
+        ).fetchone()
+        if row and row[0]:
+            for alt in row[0].split(","):
+                alt = alt.strip()
+                # Chinese characters (CJK Unified Ideographs)
+                if alt and all('一' <= c <= '鿿' for c in alt):
+                    return alt
+    except Exception as e:
+        logger.warning("_get_chinese_name failed for %s: %s", eng_name, e)
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass  # intentionally ignored: db.close() cleanup failure is harmless
+    return ""
+
+
+# ── Voice layer: t2s + strip wiki tone + truncate + distancing ───────
+
+_MAX_VOICE_LEN = 150
+
+_WIKI_OPENING_RE = re.compile(
+    r'^[一-鿿·]{1,20}(?:是|位于|坐落于|地处|属于|为)'
+)
+
+_DISTANCING_LINES: list[str] = [
+    "这是书上说的。",
+    "书里这么写的,对不对你到了再看。",
+    "文字是这么记的。",
+]
+
+
+# 转换器无状态可复用, 构造要加载词典, 惰性缓存一份
+_opencc_converter = None
+
+
+def _t2s(text: str) -> str:
+    """Traditional to Simplified Chinese (opencc t2s)."""
+    global _opencc_converter
+    try:
+        import opencc
+        if _opencc_converter is None:
+            _opencc_converter = opencc.OpenCC("t2s")
+        return _opencc_converter.convert(text)
+    except Exception:
+        return text  # intentionally ignored: opencc optional
+
+
+def _strip_wiki_opening(text: str) -> str:
+    """Replace encyclopedia-style opening with natural entry."""
+    m = _WIKI_OPENING_RE.match(text)
+    if m:
+        text = text[m.end():]
+        text = text.lstrip('，,。 ')
+    return text
+
+
+def _truncate_at_boundary(text: str, max_len: int = _MAX_VOICE_LEN) -> str:
+    """Cut to <=max_len chars, preferring sentence boundaries."""
+    if len(text) <= max_len:
+        return text
+    cut = text[:max_len]
+    for sep in ('。', '！', '？', '；', '.', '!', '?'):
+        idx = cut.rfind(sep)
+        if idx > 50:
+            return cut[:idx + 1]
+    return cut + "……"
+
+
+def voice_layer(text: str, rng: _random.Random | None = None) -> str:
+    """Voice processing: t2s, strip wiki tone, truncate, add distancing line.
+
+    Call this on every KB extract before returning to the user.
+    """
+    if not text:
+        return text
+    text = _t2s(text)
+    text = _strip_wiki_opening(text)
+    text = _truncate_at_boundary(text)
+    if rng is None:
+        rng = _random.Random()
+    # extract 未必以句号收尾, 直接拼接会产出"……当地用人民币这是书上说的。"
+    if text[-1] not in "。！？…":
+        text += "。"
+    text += rng.choice(_DISTANCING_LINES)
+    return text
+
+
+def has_knowledge(topic: str) -> bool:
+    """Quick sync check: does the knowledge base have content for *topic*?
+
+    Used by walk_impl to decide whether to hint 'ask 能问出更多'.
+    Uses a first-character inverted index to avoid scanning all KB keys.
+    """
+    kb = _load_local_kb()
+    if not topic:
+        return False
+    if topic in kb:
+        return True
+    # Narrow candidates via inverted index: only check keys whose first
+    # character matches the query's first character (or second, if the
+    # query starts with a common prefix like a space).
+    idx = _kb_char_index or {}
+    candidates = idx.get(topic[0], [])
+    for name in candidates:
+        if topic in name:
+            return True
+    return False

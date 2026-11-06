@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Run tests
+        run: python -m pytest nowhere/tests/ -q
+
+  wheel:
+    name: wheel build + smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        run: |
+          pip install build
+          python -m build --wheel
+      - name: Install wheel in clean venv (cwd outside source)
+        run: |
+          python -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install --no-cache-dir dist/*.whl
+      - name: Wheel smoke test (from /tmp, no source tree)
+        working-directory: /tmp
+        run: /tmp/wheel-venv/bin/python -m nowhere.tests.wheel_smoke
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t nowhere-real-earth:ci .
+
+  mcp:
+    name: MCP startup + handshake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Start streamable-HTTP MCP server
+        run: |
+          mkdir -p /tmp/nowhere-home
+          NOWHERE_HOME=/tmp/nowhere-home \
+            python -m nowhere.server --http 8097 > /tmp/nowhere-server.log 2>&1 &
+          echo $! > /tmp/nowhere-server.pid
+      - name: MCP handshake (tools/list == 36)
+        run: |
+          python tools/mcp_handshake.py http://127.0.0.1:8097/mcp 36
+      - name: Server log on failure
+        if: failure()
+        run: cat /tmp/nowhere-server.log

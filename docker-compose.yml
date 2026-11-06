@@ -1,0 +1,18 @@
+services:
+  nowhere:
+    build: .
+    container_name: nowhere-real-earth
+    # 只映射到 loopback: 无鉴权的 single-user 服务不得直接暴露到局域网/公网
+    ports:
+      - "127.0.0.1:8097:8097"
+    environment:
+      NOWHERE_HOME: /srv/nowhere/runtime
+      # 可选: 和风天气 key
+      # NOWHERE_QWEATHER_KEY: ""
+      # 可选: 高德 Web Service key（只在服务端使用）
+      # NOWHERE_AMAP_KEY: ""
+      # 手机分享必须是反向代理提供的完整 HTTPS origin，不要带 /mcp
+      # NOWHERE_SHARE_PUBLIC_URL: "https://travel.example.com"
+    volumes:
+      - ./runtime:/srv/nowhere/runtime
+    restart: unless-stopped

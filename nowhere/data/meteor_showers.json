@@ -1,0 +1,91 @@
+{
+  "_说明": "六大流星雨窗口。peak_date为每年峰值日期(MM-DD), days为前后天数, ZHR为极大时流量(大/中/小).",
+  "showers": [
+    {
+      "name": "英仙座流星雨",
+      "name_en": "Perseids",
+      "peak_date": "08-12",
+      "days": 3,
+      "ZHR": "大",
+      "constellation": "Perseus",
+      "hemisphere": "north",
+      "note": "最稳定、最被观测的流星雨"
+    },
+    {
+      "name": "双子座流星雨",
+      "name_en": "Geminids",
+      "peak_date": "12-13",
+      "days": 3,
+      "ZHR": "大",
+      "constellation": "Gemini",
+      "hemisphere": "both",
+      "note": "年底最亮的流星雨"
+    },
+    {
+      "name": "象限仪座流星雨",
+      "name_en": "Quadrantids",
+      "peak_date": "01-03",
+      "days": 3,
+      "ZHR": "中",
+      "constellation": "Bootes",
+      "hemisphere": "north",
+      "note": "新年第一场流星雨,峰值只持续几小时"
+    },
+    {
+      "name": "猎户座流星雨",
+      "name_en": "Orionids",
+      "peak_date": "10-21",
+      "days": 3,
+      "ZHR": "中",
+      "constellation": "Orion",
+      "hemisphere": "both",
+      "note": "哈雷彗星碎片"
+    },
+    {
+      "name": "宝瓶座η流星雨",
+      "name_en": "Eta Aquariids",
+      "peak_date": "05-05",
+      "days": 3,
+      "ZHR": "小",
+      "constellation": "Aquarius",
+      "hemisphere": "both",
+      "note": "也是哈雷彗星碎片,南半球更好"
+    }
+  ],
+  "meteor_variants": {
+    "大": [
+      "流星从头顶划过去,亮的,拖着一条尾巴,一秒多才散。",
+      "又一颗。这回更亮,在天上刻了一道白印。",
+      "流星雨。天上每隔几秒就划过去一颗,你数不过来。",
+      "一颗长尾巴的流星从北边划到南边,整个夜空都亮了一下。",
+      "你仰着头,流星一颗接一颗,像有人在天上划火柴。",
+      "一颗极亮的流星炸开,碎成几瓣,尾巴在天上挂了好几秒。"
+    ],
+    "中": [
+      "天上划过一道光,亮的,一闪就没了。流星。",
+      "一颗流星从东边划到西边,短促,像眨眼。",
+      "等了一会儿,又来一颗。比刚才暗,但你看到了。",
+      "夜空里偶尔划过一颗流星,要耐心等。"
+    ],
+    "小": [
+      "你盯着天看了很久,终于看到一颗流星,细细的,一晃就没了。",
+      "偶尔有流星。不多,要靠运气。你盯着天,等。",
+      "天上什么也没有——不,刚才划过去一颗,你差点没看到。"
+    ]
+  },
+  "eclipses": {
+    "_说明": "2026-2035 日月食占位表,精确到日",
+    "solar": [
+      {"date": "2026-02-17", "type": "annular", "note": "日环食,南极可见"},
+      {"date": "2026-08-12", "type": "total", "note": "日全食,格陵兰/西班牙可见"},
+      {"date": "2027-02-06", "type": "annular", "note": "日环食"},
+      {"date": "2027-08-02", "type": "total", "note": "日全食,北非/中东可见"}
+    ],
+    "lunar": [
+      {"date": "2026-03-03", "type": "total", "note": "月全食"},
+      {"date": "2026-08-28", "type": "partial", "note": "月偏食"},
+      {"date": "2027-02-20", "type": "penumbral", "note": "半影月食"},
+      {"date": "2027-07-18", "type": "partial", "note": "月偏食"}
+    ]
+  }
+}

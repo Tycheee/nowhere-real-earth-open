@@ -1,0 +1,25 @@
+[project]
+name = "nowhere-mcp"
+version = "1.2.0"
+description = "nowhere-real-earth: 高精度海陆判断 + 多语言地名解析 + 叙事事实校验增强版 (upstream: yuyixuanfu/nowhere, CC BY-NC 4.0)"
+requires-python = ">=3.11"
+dependencies = ["fastmcp>=2", "starlette", "httpx", "numpy", "scipy", "skyfield", "timezonefinder", "uvicorn", "opencc-python-reimplemented", "ephem", "tzdata"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "respx"]
+
+[project.scripts]
+nowhere = "nowhere.server:main"
+nowhere-mcp = "nowhere.server:main"
+
+[tool.setuptools.packages.find]
+include = ["nowhere*"]
+
+[tool.setuptools.package-data]
+nowhere = ["data/*", "data/offline/*", "static/*", "content.db"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "slow: long-running tests (e.g. landmask rebuild reproducibility)",
+]

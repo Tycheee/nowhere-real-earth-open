@@ -1,0 +1,47 @@
+{
+  "any": [
+    {"text": "跟着水声走。", "action": "toward_sea"},
+    {"text": "朝最亮的地方走。", "action": "toward_light"},
+    {"text": "背着风走。", "action": "downwind"},
+    {"text": "挑一条没走过的路。", "action": "turn_next"},
+    {"text": "脚踩到什么就往哪走。", "action": "turn_next"},
+    {"text": "闭上眼转一圈,睁眼朝那个方向走。", "action": "turn_next"}
+  ],
+  "city": [
+    {"text": "找下一个拐角,拐。", "action": "turn_next"},
+    {"text": "跟着人群走。哪人多往哪去。", "action": "turn_next"},
+    {"text": "沿着有灯的那条路走。", "action": "toward_light"},
+    {"text": "找一条巷子,窄的那种。进去。", "action": "turn_next"},
+    {"text": "听有音乐的方向,朝那边走。", "action": "turn_next"}
+  ],
+  "forest": [
+    {"text": "树密的地方走不动,找缝隙钻。", "action": "turn_next"},
+    {"text": "跟着鸟叫声走。", "action": "turn_next"},
+    {"text": "踩着落叶走,声音脆的方向。", "action": "turn_next"},
+    {"text": "往树冠矮的地方走,那边可能有路。", "action": "turn_next"},
+    {"text": "顺着坡往下走。", "action": "downwind"}
+  ],
+  "desert": [
+    {"text": "背着太阳走,影子在前面给你探路。", "action": "toward_light"},
+    {"text": "找远处颜色不一样的地方,那边可能有水。", "action": "turn_next"},
+    {"text": "顺着风的方向走,省力。", "action": "downwind"},
+    {"text": "朝着有石头堆的方向走。", "action": "turn_next"}
+  ],
+  "mountain": [
+    {"text": "往高处走,看看四周。", "action": "uphill"},
+    {"text": "顺着山脊走,风会告诉你方向。", "action": "downwind"},
+    {"text": "找有水声的方向,下山总有水。", "action": "toward_sea"},
+    {"text": "沿着等高线走,不费劲。", "action": "turn_next"}
+  ],
+  "coast": [
+    {"text": "沿着海岸线走,海在哪边你都知道。", "action": "toward_sea"},
+    {"text": "踩着浪花的边走。", "action": "toward_sea"},
+    {"text": "往有礁石的方向走。", "action": "turn_next"},
+    {"text": "朝码头的方向走,那边有人。", "action": "turn_next"}
+  ],
+  "water": [
+    {"text": "顺着水流的方向漂。", "action": "downwind"},
+    {"text": "朝有岸的那边划。", "action": "turn_next"},
+    {"text": "跟着水鸟的方向走。", "action": "turn_next"}
+  ]
+}

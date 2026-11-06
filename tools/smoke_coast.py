@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+import sys
+sys.path.insert(0, ".")
+from nowhere import coast
+
+print("south point:", coast.classify(33.2454, 126.5483))
+print("mid point:", coast.classify(33.3803, 126.5483))
+print("hallasan:", coast.classify(33.3617, 126.5297))
+print("sea point (33.1, 126.8):", coast.classify(33.1, 126.8))
+print("nearest ocean:", coast.nearest_ocean(33.2454, 126.5483, 50))
+print("wide scan:", coast.wide_scan(33.2454, 126.5483))
+print("scan S from mid:", coast.scan_ahead(33.3803, 126.5483, 180, 30))
+print("scan N from mid:", coast.scan_ahead(33.3803, 126.5483, 0, 30))
+print("Beijing:", coast.classify(39.9042, 116.4074))
+print("Caspian:", coast.classify(42.0, 50.5))
+print("Lake Geneva:", coast.classify(46.43, 6.55))
+print("Hawaii big isl:", coast.classify(19.6, -155.5))
+print("Honolulu:", coast.classify(21.31, -157.86))
+print("Singapore:", coast.classify(1.35, 103.82))
+print("Taiwan:", coast.classify(23.7, 121.0))
+print("Malta:", coast.classify(35.9, 14.4))
+print("Hainan:", coast.classify(19.2, 109.7))
+print("Kyushu:", coast.classify(32.5, 130.9))
+print("Jeju coast 33.24,126.56:", coast.classify(33.24, 126.56))
+print("nearest ocean Jeju city:", coast.nearest_ocean(33.4996, 126.5312, 30))

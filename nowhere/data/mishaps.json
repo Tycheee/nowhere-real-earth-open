@@ -1,0 +1,155 @@
+[
+  {
+    "id": "shoe_sand",
+    "tier": "shoe",
+    "text": "鞋里进了粒沙,你走三步硌一下,停下来倒。",
+    "echo": "鞋里那粒沙好像还在。你又走了一步,硌了一下。"
+  },
+  {
+    "id": "shoe_lace",
+    "tier": "shoe",
+    "text": "鞋带松了,你踩到自己绊了一下。没摔倒,但脸红了。",
+    "echo": "你低头看了一眼鞋带,系紧了。"
+  },
+  {
+    "id": "shoe_wet_sock",
+    "tier": "shoe",
+    "text": "袜子湿了,脚趾在里面打滑。你走了几步,每一步都吱一声。",
+    "echo": "袜子还是湿的,每一步都吱一声。"
+  },
+  {
+    "id": "shoe_blister",
+    "tier": "shoe",
+    "text": "脚后跟磨出一个泡。你走路的姿势变了,重心往前移了一点。",
+    "echo": "脚后跟那个泡还在,你每一步都小心着它。"
+  },
+  {
+    "id": "shoe_pebble",
+    "tier": "shoe",
+    "text": "一颗小石子卡在鞋底纹路里,你抠了半天才弄出来。",
+    "echo": "鞋底那颗石子的位置你还记得,走路时有意绕开。"
+  },
+  {
+    "id": "time_rain",
+    "tier": "time",
+    "text": "突然一阵雨,你在屋檐下站了二十分钟。雨停了,空气里有泥土的味道。",
+    "echo": "衣服上还有刚才那阵雨的湿气。",
+    "elapsed_hours": 0.3,
+    "requires": {"precip": "rain"}
+  },
+  {
+    "id": "time_rain_heavy",
+    "tier": "time",
+    "text": "雨下大了。你躲进一个不知道谁家的门洞里,等了半小时。门口的猫看了你一眼,又睡了。",
+    "echo": "刚才那场雨把你淋透了,衣服贴在身上。",
+    "elapsed_hours": 0.3,
+    "requires": {"precip": "rain"}
+  },
+  {
+    "id": "time_snow_wait",
+    "tier": "time",
+    "text": "雪下密了,你在一个加油站的棚子底下站了二十分钟。地上白了一层。",
+    "echo": "刚才那场雪还在你肩膀上,没化完。",
+    "elapsed_hours": 0.3,
+    "requires": {"precip": "snow"}
+  },
+  {
+    "id": "time_storm",
+    "tier": "time",
+    "text": "打雷了。你蹲在路边一辆报废的面包车旁边,等了二十分钟。雨打在车顶上,声音大得听不见别的。",
+    "echo": "你闻到空气里还有刚才雷暴留下的臭氧味。",
+    "elapsed_hours": 0.3,
+    "requires": {"precip": "storm"}
+  },
+  {
+    "id": "time_lost_track",
+    "tier": "time",
+    "text": "你坐在路边歇了一会儿,一抬头,四十分钟过去了。太阳移了老远。",
+    "echo": "你又想坐下来歇。忍住了。",
+    "elapsed_hours": 0.3
+  },
+  {
+    "id": "time_long_break",
+    "tier": "time",
+    "text": "你在一个不知道叫什么的地方坐了很久。风把你头发吹乱了。你站起来,膝盖响了一声。",
+    "echo": "膝盖又响了一声。",
+    "elapsed_hours": 0.3
+  },
+  {
+    "id": "path_wrong_turn",
+    "tier": "path",
+    "text": "走错了,绕回来多花了半小时。路口没有标志,你凭感觉选了一个方向,感觉骗了你。",
+    "echo": "你又看了一眼路口,确认这次没走错。",
+    "elapsed_hours": 0.5
+  },
+  {
+    "id": "path_loop",
+    "tier": "path",
+    "text": "你发现自己回到了刚才经过的那棵树。走了个圈。你换了个方向,重新走。",
+    "echo": "你特意看了一眼旁边的树,确认不是刚才那棵。",
+    "elapsed_hours": 0.5
+  },
+  {
+    "id": "path_dead_end",
+    "tier": "path",
+    "text": "路断了。前面是围墙,你只好往回走,找另一条路。多花了二十分钟。",
+    "echo": "你还在想刚才那条死路。",
+    "elapsed_hours": 0.5
+  },
+  {
+    "id": "path_map_wrong",
+    "tier": "path",
+    "text": "地图和现实对不上。你站在路口看了半天,最后决定跟着太阳走。",
+    "echo": "地图还攥在手里,你没再看它。",
+    "elapsed_hours": 0.5
+  },
+  {
+    "id": "path_circled_back",
+    "tier": "path",
+    "text": "你绕了一大圈,回到原地。脚底磨得发热。你深吸一口气,换了个方向。",
+    "echo": "你下意识看了一眼脚底,没起泡。",
+    "elapsed_hours": 0.5
+  },
+  {
+    "id": "item_water_leak",
+    "tier": "item",
+    "text": "水袋漏了,到下一个镇之前得省着喝。你把水袋口朝上,走慢一点。",
+    "echo": "水袋的漏还在,你走路时小心不让它晃。",
+    "mishap_tag": "thirsty"
+  },
+  {
+    "id": "item_zipper_broke",
+    "tier": "item",
+    "text": "背包拉链坏了,你用一根绳子把口子扎起来。东西不会掉,但拿东西要解绳子。",
+    "echo": "背包的拉链还是坏的,你已经习惯解绳子了。",
+    "mishap_tag": "broken_zipper"
+  },
+  {
+    "id": "item_phone_died",
+    "tier": "item",
+    "text": "手机没电了。你把它放回口袋。世界突然安静了一点。",
+    "echo": "你摸了一下口袋,手机还是冷的。没电。",
+    "mishap_tag": "no_phone"
+  },
+  {
+    "id": "item_hat_lost",
+    "tier": "item",
+    "text": "帽子被风吹走了。你追了两步,没追上。你看着它越滚越远。",
+    "echo": "你用手挡了一下太阳。帽子不在了。",
+    "mishap_tag": "no_hat"
+  },
+  {
+    "id": "item_snack_spilled",
+    "tier": "item",
+    "text": "口袋里的饼干碎了,渣子撒了一口袋。你伸手进去摸到一把碎屑。",
+    "echo": "口袋里还有饼干渣。你没管它。",
+    "mishap_tag": "crumbs"
+  },
+  {
+    "id": "item_pen_leaked",
+    "tier": "item",
+    "text": "笔漏墨了,你手指上染了一块蓝。你擦了擦,擦不掉。",
+    "echo": "你看了看手指,那块蓝还在。",
+    "mishap_tag": "ink_stain"
+  }
+]

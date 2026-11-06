@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#123b4a">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+    <title>乌有乡 · 一起走</title>
+    <link rel="stylesheet" href="/location-assets/styles.css">
+    <script src="/location-assets/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <span class="mark" aria-hidden="true">乡</span>
+        <div><p>乌有乡 · 同行</p><h1>把这一小段路，分享给我</h1></div>
+      </header>
+
+      <section class="card session" aria-labelledby="session-title">
+        <div><small>本次旅程</small><h2 id="session-title">正在读取邀请…</h2></div>
+        <span id="precision" class="badge" hidden>—</span>
+        <dl>
+          <div><dt>有效时间</dt><dd id="expires">—</dd></div>
+          <div><dt>分享精度</dt><dd id="precision-copy">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="card sharing" aria-labelledby="status-title">
+        <div id="orb" class="orb" data-state="idle" aria-hidden="true">
+          <span></span><svg viewBox="0 0 32 32"><path d="M16 29s9-8.5 9-18a9 9 0 1 0-18 0c0 9.5 9 18 9 18Z"/><circle cx="16" cy="11" r="3.5"/></svg>
+        </div>
+        <small>当前状态</small>
+        <h2 id="status-title">尚未开始</h2>
+        <p id="status-copy">只有你亲手按下开始后，浏览器才会请求定位权限。</p>
+
+        <div class="actions">
+          <button id="start" class="primary" type="button" disabled>开始共享位置</button>
+          <button id="pause" type="button" hidden>暂停</button>
+        </div>
+        <button id="stop" class="stop" type="button" hidden>结束本次分享</button>
+
+        <div class="telemetry">
+          <div><small>定位精度</small><strong id="accuracy">—</strong></div>
+          <div><small>最近获取</small><strong id="captured">—</strong></div>
+          <div><small>最近送达</small><strong id="synced">—</strong></div>
+        </div>
+      </section>
+
+      <p id="notice" class="notice" role="status" aria-live="polite"></p>
+      <aside class="privacy">
+        <span aria-hidden="true">⌾</span>
+        <div><h2>位置在你手里</h2><p>页面没有广告或分析脚本。暂停或结束会立即停止本页获取位置；链接中的凭证会在打开后从地址栏移除，服务端只保存它的摘要。</p><p>iPhone 锁屏或把 Safari 放到后台后通常会暂停定位。想继续同行，请保持此页在前台。</p></div>
+      </aside>
+      <footer><span id="network">检查网络中</span> · 不承诺后台上传</footer>
+    </main>
+    <noscript>需要开启 JavaScript 才能在你同意后分享定位。</noscript>
+  </body>
+</html>

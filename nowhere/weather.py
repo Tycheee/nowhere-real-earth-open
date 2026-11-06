@@ -1,0 +1,266 @@
+"""Weather with three-tier fallback: qweather -> Open-Meteo -> climate zone.
+
+Never returns None, never raises.
+"""
+
+from __future__ import annotations
+
+import datetime
+import logging
+import math
+import os
+from typing import Any, Final
+
+logger = logging.getLogger(__name__)
+
+from nowhere import providers
+
+# A8: single source in water — climate-zone / stable-pseudo-random are shared
+# by the air-temperature and sea-surface fallbacks, so only water.py defines them.
+from nowhere.water import _climate_zone, _stable_random
+
+# ── WMO weather code -> (precip, chinese_text) ─────────────────────
+# https://www.noaa.gov/weather/wmo-weather-interpretation-codes
+_WMO_MAP: Final[dict[int, tuple[str, str]]] = {
+    0: ("none", "晴"),
+    1: ("none", "大部晴"),
+    2: ("none", "多云"),
+    3: ("none", "阴"),
+    45: ("none", "雾"),
+    48: ("none", "冻雾"),
+    51: ("rain", "小毛毛雨"),
+    53: ("rain", "毛毛雨"),
+    55: ("rain", "大毛毛雨"),
+    56: ("rain", "冻毛毛雨"),
+    57: ("rain", "冻毛毛雨"),
+    61: ("rain", "小雨"),
+    63: ("rain", "中雨"),
+    65: ("rain", "大雨"),
+    66: ("rain", "冻雨"),
+    67: ("rain", "大冻雨"),
+    71: ("snow", "小雪"),
+    73: ("snow", "中雪"),
+    75: ("snow", "大雪"),
+    77: ("snow", "米雪"),
+    80: ("rain", "小阵雨"),
+    81: ("rain", "阵雨"),
+    82: ("rain", "大阵雨"),
+    85: ("snow", "小阵雪"),
+    86: ("snow", "大阵雪"),
+    95: ("storm", "雷暴"),
+    96: ("storm", "雷暴伴冰雹"),
+    99: ("storm", "强雷暴伴冰雹"),
+}
+
+# ── Climate zone tables ────────────────────────────────────────────
+# zone -> [jan, feb, ..., dec] temp_c
+_CLIMATE_TEMP: Final[dict[str, list[float]]] = {
+    "equator":      [27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27],
+    "subtropical":  [15, 16, 19, 23, 27, 30, 30, 29, 27, 23, 19, 15],
+    "temperate":    [2,  3,  7, 12, 17, 21, 23, 22, 18, 12,  7,  3],
+    "subarctic":   [-15,-13, -5,  3, 10, 15, 18, 16, 10,  2, -7,-13],
+    "polar":       [-30,-32,-28,-20,-10, -2,  0, -2,-10,-20,-28,-30],
+}
+
+
+def _cloud_from_text(text: str, precip: str) -> float:
+    """Estimate cloud cover percent (0-100) from description / precipitation.
+
+    CODE-02: consumers (notebook "阴天" branch) read a ``cloud`` key, so every
+    weather payload must carry one even when the upstream API omits it.
+    """
+    if precip in ("rain", "snow", "storm"):
+        return 90.0
+    # Order matters: "大部晴" contains "晴".
+    for kw, cover in (("阴", 95.0), ("雾", 90.0), ("冻雾", 90.0),
+                      ("多云", 55.0), ("大部晴", 30.0), ("晴", 10.0)):
+        if kw in text:
+            return cover
+    return 50.0
+
+
+def _climate_fallback(lat: float, lon: float, elevation: float | None = None,
+                      local_hour: int | None = None,
+                      dt: datetime.date | datetime.datetime | None = None) -> dict[str, Any]:
+    """Offline climate-zone estimate. Always returns a valid dict.
+
+    *dt* is the event-time date (same clock as *local_hour*).  TME-01: never
+    fall back to the server's ``date.today()`` when the caller has event time —
+    the two clocks disagree and the diurnal/seasonal maths then mix semantics.
+    """
+    zone = _climate_zone(lat)
+    # Month comes from *dt* (event time) whenever the caller has one.  The
+    # fallback is the *server's* local date — there is no target-timezone
+    # day-boundary math here (local_hour alone cannot determine the month).
+    month = (dt or datetime.date.today()).month  # 1-indexed
+    # Southern hemisphere: shift month by 6 to flip seasons
+    if lat < 0:
+        month = ((month - 1 + 6) % 12) + 1
+    temp = _CLIMATE_TEMP[zone][month - 1]  # list is 0-indexed, month is 1-indexed
+    # Diurnal (day/night) temperature variation
+    if local_hour is not None:
+        # Trough at 05:00, peak at ~17:00 (cosine, period=24h):
+        # 最低温在日出前, 24h 周期的峰谷必相差 12h
+        # Amplitude: ±12°C for equator/subtropical, ±8°C for temperate
+        amplitude = 12.0 if zone in ("equator", "subtropical") else 8.0
+        hour_angle = (local_hour - 5) * (2 * math.pi / 24)  # trough at 5am
+        temp -= amplitude * math.cos(hour_angle)
+    # Atmospheric lapse rate correction: ~6.5°C per 1000m
+    if elevation and elevation > 0:
+        temp -= elevation * 0.0065
+    wind = _stable_random(lat, lon, 3.0, 8.0)
+    text = "气候估算"
+    return {
+        "temp_c": round(temp, 1),
+        "feels_c": round(temp - 2, 1),
+        "wind_ms": round(wind, 1),
+        "humidity": 60.0,
+        "precip": "none",
+        "cloud": _cloud_from_text(text, "none"),
+        "text": text,
+        "source": "climate",
+    }
+
+
+# ── QWeather ───────────────────────────────────────────────────────
+
+
+def _precip_from_text(text: str) -> str:
+    """Infer precipitation type from Chinese weather description."""
+    for kw, p in [("雪", "snow"), ("雷", "storm"), ("雨", "rain"), ("冰雹", "storm")]:
+        if kw in text:
+            return p
+    return "none"
+
+
+async def _try_qweather(lat: float, lon: float) -> dict[str, Any] | None:
+    """Try QWeather API. Returns dict on success, None on failure."""
+    key = os.environ.get("NOWHERE_QWEATHER_KEY", "")
+    if not key:
+        return None
+    # LOG-04: keep the key out of the URL string — pass it via params so a
+    # provider exception log can never echo the full request URL with credentials.
+    url = f"https://devapi.qweather.com/v7/weather/now?location={lon},{lat}"
+    data = await providers.fetch_json(url, source="qweather", cache_ttl=300, params={"key": key})
+    if data is None:
+        return None
+    if str(data.get("code")) != "200":
+        return None
+    now = data.get("now")
+    if not now:
+        return None
+    try:
+        temp = float(now["temp"])
+        feels = float(now["feelsLike"])
+        # QWeather windSpeed 的单位是 km/h, 字段契约为 m/s → 换算
+        wind = float(now["windSpeed"]) / 3.6
+        humidity = float(now["humidity"])
+        text = now.get("text", "")
+    except (KeyError, ValueError, TypeError):
+        return None
+    precip = _precip_from_text(text)
+    # CODE-02: always publish a cloud cover value (0-100).
+    try:
+        cloud = float(now["cloud"]) if now.get("cloud") not in (None, "") else _cloud_from_text(text, precip)
+    except (KeyError, ValueError, TypeError):
+        cloud = _cloud_from_text(text, precip)
+    return {
+        "temp_c": temp,
+        "feels_c": feels,
+        "wind_ms": wind,
+        "humidity": humidity,
+        "precip": precip,
+        "cloud": cloud,
+        "text": text,
+        "source": "qweather",
+    }
+
+
+# ── Open-Meteo ─────────────────────────────────────────────────────
+
+
+async def _try_openmeteo(lat: float, lon: float) -> dict[str, Any] | None:
+    """Try Open-Meteo free API. Returns dict on success, None on failure."""
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&current=temperature_2m,relative_humidity_2m,apparent_temperature,"
+        f"precipitation,weather_code,wind_speed_10m,cloud_cover"
+        f"&wind_speed_unit=ms"  # 默认 km/h, 字段契约为 m/s
+    )
+    data = await providers.fetch_json(url, source="openmeteo", cache_ttl=300)
+    if data is None:
+        return None
+    cur = data.get("current")
+    if not cur:
+        return None
+    try:
+        temp = float(cur["temperature_2m"])
+        feels = float(cur["apparent_temperature"])
+        humidity = float(cur["relative_humidity_2m"])
+        wind = float(cur["wind_speed_10m"])
+        code = int(cur["weather_code"])
+        # 降水为 null 时按 0 处理, 不为一个非关键字段丢整条在线数据
+        raw_precip = cur.get("precipitation")
+        precip_val = float(raw_precip) if raw_precip is not None else 0.0
+    except (KeyError, ValueError, TypeError):
+        return None
+    # Look up WMO code
+    precip_type, text = _WMO_MAP.get(code, ("none", "未知"))
+    # If WMO says no precipitation but precipitation > 0, call it rain
+    if precip_type == "none" and precip_val > 0:
+        precip_type = "rain"
+        text = "降水"
+    # CODE-02: always publish a cloud cover value (0-100).
+    try:
+        cloud = float(cur["cloud_cover"]) if cur.get("cloud_cover") is not None else _cloud_from_text(text, precip_type)
+    except (KeyError, ValueError, TypeError):
+        cloud = _cloud_from_text(text, precip_type)
+    return {
+        "temp_c": temp,
+        "feels_c": feels,
+        "wind_ms": wind,
+        "humidity": humidity,
+        "precip": precip_type,
+        "cloud": cloud,
+        "text": text,
+        "source": "openmeteo",
+    }
+
+
+# ── Public API ─────────────────────────────────────────────────────
+
+
+async def current(lat: float, lon: float, elevation: float | None = None,
+                  local_hour: int | None = None,
+                  dt: datetime.date | datetime.datetime | None = None) -> dict[str, Any]:
+    """Return weather at (lat, lon).  Never None, never raises.
+
+    Fallback chain: qweather (CN only) -> Open-Meteo (accurate) -> climate zone offline (fast).
+    Open-Meteo already accounts for elevation, so lapse rate correction
+    is only applied to the climate fallback.
+
+    *dt* — event-time date, the same clock behind *local_hour* (TME-01).
+    """
+    # 0) Try QWeather first (only fires when NOWHERE_QWEATHER_KEY is set).
+    #    It returns None fast when the key is missing, so non-CN callers pay
+    #    only one dict lookup.
+    try:
+        qw = await _try_qweather(lat, lon)
+        if qw is not None:
+            # QWeather already returns current temperature — no diurnal correction needed
+            return qw
+    except Exception:
+        logger.warning("QWeather failed unexpectedly", exc_info=True)
+
+    # 1) Try Open-Meteo next (accurate, accounts for elevation)
+    try:
+        online = await _try_openmeteo(lat, lon)
+        if online is not None:
+            # Open-Meteo already returns current temperature — no diurnal correction needed
+            return online
+    except Exception:
+        logger.warning("Open-Meteo failed unexpectedly", exc_info=True)
+
+    # 2) Climate zone offline fallback (needs lapse rate correction)
+    return _climate_fallback(lat, lon, elevation=elevation, local_hour=local_hour, dt=dt)
